@@ -1,0 +1,5 @@
+{
+  "name": "専門分野特化型AI記事生成アプリ",
+  "description": "法律、医療、不動産の各専門分野に特化したAIが、Web上の最新情報を基に高品質なSEO記事を自動生成し、WordPressサイトへの投稿を支援するアプリケーションです。",
+  "requestFramePermissions": []
+}
