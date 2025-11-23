@@ -2,10 +2,14 @@ import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import type { GroundingSource, PlanType, Tone, Language } from '../types';
 import { PlanType as PlanTypeEnum } from '../types';
 
-const API_KEY = process.env.API_KEY;
+const getEnv = (name: string): string | undefined => {
+  return (import.meta as any).env?.[name] ?? process.env?.[name];
+};
+
+const API_KEY = getEnv('VITE_API_KEY') ?? getEnv('API_KEY');
 
 if (!API_KEY) {
-  throw new Error("API_KEYが設定されていません。");
+  throw new Error("VITE_API_KEYが設定されていません。");
 }
 
 const ai = new GoogleGenAI({ apiKey: API_KEY });

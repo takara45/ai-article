@@ -37,12 +37,14 @@ export interface Article {
   eyecatchImage?: string;
   metaDescription: string;
   headingImages: HeadingImage[];
+  userId?: string;
 }
 
 export interface WordPressCredentials {
   url: string;
   username: string;
   appPassword: string;
+  siteName?: string;
 }
 
 export interface GroundingSource {

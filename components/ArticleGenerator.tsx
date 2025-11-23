@@ -5,6 +5,8 @@ import { generateTitles, generateArticle, generateImage, generateHeadingImages }
 import { ArrowLeftIcon, SparklesIcon, ChevronRightIcon, DocumentArrowUpIcon, PhotoIcon, CodeBracketIcon, EyeIcon, ArrowPathIcon } from './icons/Icons';
 import PostToWordPressModal from './PostToWordPressModal';
 import { marked } from 'marked';
+import { saveArticle } from '../services/articleRepository';
+import { isWpProxyConfigured } from '../services/wordpressService';
 
 type Step = 'keywords' | 'titles' | 'editor';
 type EditorView = 'preview' | 'markdown' | 'html';
@@ -28,9 +30,11 @@ interface ArticleGeneratorProps {
   onBack: () => void;
   onArticleGenerated: (article: Article) => void;
   wpCredentials: WordPressCredentials;
+  userId?: string;
 }
 
-const ArticleGenerator: React.FC<ArticleGeneratorProps> = ({ plan, onBack, onArticleGenerated, wpCredentials }) => {
+const ArticleGenerator: React.FC<ArticleGeneratorProps> = ({ plan, onBack, onArticleGenerated, wpCredentials, userId }) => {
+  const wpProxyEnabled = isWpProxyConfigured();
   const [step, setStep] = useState<Step>('keywords');
   const [keywords, setKeywords] = useState('');
   const [targetAudience, setTargetAudience] = useState('');
@@ -281,9 +285,18 @@ const ArticleGenerator: React.FC<ArticleGeneratorProps> = ({ plan, onBack, onArt
       eyecatchImage: eyecatchImage || undefined,
       metaDescription,
       headingImages,
+      userId,
     };
     onArticleGenerated(newArticle);
+    // 保存は非同期で行い、失敗しても画面遷移は継続する
+    saveArticle(newArticle, userId).catch((err) => {
+      console.error('Supabaseへの記事保存に失敗しました:', err);
+    });
     onBack();
+  };
+
+  const handleSaveDraft = () => {
+    handlePostComplete('下書き');
   };
 
 
@@ -625,15 +638,28 @@ const ArticleGenerator: React.FC<ArticleGeneratorProps> = ({ plan, onBack, onArt
             </div>
 
             <div className="text-right">
-                <button
-                    onClick={() => setIsPostModalOpen(true)}
-                    className="bg-green-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-green-700 transition-colors disabled:bg-slate-400"
-                    disabled={!wpCredentials.url || !wpCredentials.username || !wpCredentials.appPassword}
-                >
-                    WordPressに投稿する
-                </button>
-                {(!wpCredentials.url || !wpCredentials.username || !wpCredentials.appPassword) && 
-                    <p className="text-xs text-red-600 mt-1 text-right">WordPress連携設定が未完了です。</p>
+                <div className="flex flex-col sm:flex-row justify-end gap-3">
+                  <button
+                    onClick={handleSaveDraft}
+                    className="bg-slate-200 text-slate-800 font-semibold py-3 px-6 rounded-md hover:bg-slate-300 transition-colors"
+                  >
+                    下書きとして保存
+                  </button>
+                  {wpProxyEnabled && (
+                    <p className="text-xs text-slate-500 text-right sm:text-left">
+                      WPプロキシ設定が有効です。WordPress側のCORS設定は不要です。
+                    </p>
+                  )}
+                  <button
+                      onClick={() => setIsPostModalOpen(true)}
+                      className="bg-green-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-green-700 transition-colors disabled:bg-slate-400"
+                      disabled={!wpProxyEnabled && (!wpCredentials.url || !wpCredentials.username || !wpCredentials.appPassword)}
+                  >
+                      WordPressに投稿する
+                  </button>
+                </div>
+                {!wpProxyEnabled && (!wpCredentials.url || !wpCredentials.username || !wpCredentials.appPassword) && 
+                    <p className="text-xs text-red-600 mt-1 text-right">WordPress連携設定が未完了です。投稿は未接続ですが、下書き保存は可能です。</p>
                 }
             </div>
         </div>
@@ -645,6 +671,9 @@ const ArticleGenerator: React.FC<ArticleGeneratorProps> = ({ plan, onBack, onArt
             onClose={() => setIsPostModalOpen(false)}
             onPost={handlePostComplete}
             articleTitle={selectedTitle}
+            articleHtml={articleHtml}
+            metaDescription={metaDescription}
+            wpParams={{ credentials: wpCredentials }}
         />
       )}
     </div>

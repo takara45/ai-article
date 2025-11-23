@@ -1,18 +1,16 @@
-import React from 'react';
-import type { Plan, Article } from '../types';
-import { PlanType } from '../types';
-import { GlobeAltIcon, AcademicCapIcon, DocumentTextIcon, CurrencyYenIcon } from './icons/Icons';
-
-const plans: Plan[] = [
-  { type: PlanType.Normal, name: '普通プラン', description: '【オウンドメディア向け】Web上の最新情報を参照し、読者に価値を提供するSEO記事を生成します。', icon: GlobeAltIcon },
-  { type: PlanType.Expert, name: '専門プラン', description: '【オウンドメディア向け】専門資料に基づき、権威性と信頼性の高い解説記事を生成します。', icon: AcademicCapIcon },
-  { type: PlanType.Affiliate, name: 'アフィリエイト記事プラン', description: '商品の魅力を伝え、読者の購買意欲を高めるレビュー記事や比較記事を生成します。', icon: CurrencyYenIcon },
-  { type: PlanType.ForeignLanguage, name: '外国語プラン', description: '英語、中国語、韓国語でオウンドメディア向けの記事を生成します。', icon: GlobeAltIcon },
-];
+import React, { useState } from 'react';
+import type { Plan, Article, WordPressCredentials, ArticleStatus } from '../types';
+import { plans } from '../plans';
+import { DocumentTextIcon } from './icons/Icons';
+import ArticlePreviewModal from './ArticlePreviewModal';
 
 interface DashboardProps {
   onSelectPlan: (plan: Plan) => void;
   articles: Article[];
+  wpCredentials: WordPressCredentials;
+  onUpdateArticle: (article: Article) => void;
+  userId?: string;
+  isLoading?: boolean;
 }
 
 const PlanCard: React.FC<{ plan: Plan; onSelect: () => void }> = ({ plan, onSelect }) => (
@@ -28,8 +26,11 @@ const PlanCard: React.FC<{ plan: Plan; onSelect: () => void }> = ({ plan, onSele
   </div>
 );
 
-const ArticleHistoryItem: React.FC<{ article: Article }> = ({ article }) => (
-    <li className="bg-white p-4 rounded-md shadow-sm border border-slate-200 flex items-center justify-between">
+const ArticleHistoryItem: React.FC<{ article: Article; onClick: () => void }> = ({ article, onClick }) => (
+    <li
+      className="bg-white p-4 rounded-md shadow-sm border border-slate-200 flex items-center justify-between cursor-pointer hover:border-sky-400 transition"
+      onClick={onClick}
+    >
       <div className='flex items-center space-x-4'>
           {article.eyecatchImage ? (
               <img src={`data:image/jpeg;base64,${article.eyecatchImage}`} alt={article.title} className="w-16 h-10 rounded object-cover bg-slate-100" />
@@ -52,7 +53,16 @@ const ArticleHistoryItem: React.FC<{ article: Article }> = ({ article }) => (
   );
 
 
-const Dashboard: React.FC<DashboardProps> = ({ onSelectPlan, articles }) => {
+const Dashboard: React.FC<DashboardProps> = ({ onSelectPlan, articles, wpCredentials, onUpdateArticle, userId, isLoading }) => {
+  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+
+  const handlePostStatusUpdate = (status: ArticleStatus) => {
+    if (!selectedArticle) return;
+    const updated = { ...selectedArticle, status };
+    setSelectedArticle(updated);
+    onUpdateArticle(updated);
+  };
+
   return (
     <div className="space-y-12">
       <section className="text-center">
@@ -68,15 +78,32 @@ const Dashboard: React.FC<DashboardProps> = ({ onSelectPlan, articles }) => {
         </div>
       </section>
       
-      {articles.length > 0 && (
+      {isLoading && (
+        <section>
+          <h3 className="text-xl font-semibold text-slate-800 mb-4">記事生成履歴</h3>
+          <p className="text-sm text-slate-500">履歴を読み込み中です...</p>
+        </section>
+      )}
+
+      {!isLoading && articles.length > 0 && (
         <section>
             <h3 className="text-xl font-semibold text-slate-800 mb-4">記事生成履歴</h3>
             <ul className="space-y-3">
                 {articles.map(article => (
-                    <ArticleHistoryItem key={article.id} article={article} />
+                    <ArticleHistoryItem key={article.id} article={article} onClick={() => setSelectedArticle(article)} />
                 ))}
             </ul>
         </section>
+      )}
+
+      {selectedArticle && (
+        <ArticlePreviewModal
+          article={selectedArticle}
+          onClose={() => setSelectedArticle(null)}
+          wpCredentials={wpCredentials}
+          onPostStatusUpdate={handlePostStatusUpdate}
+          userId={userId}
+        />
       )}
     </div>
   );

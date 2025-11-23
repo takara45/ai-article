@@ -2,36 +2,50 @@
 import React, { useState } from 'react';
 import { XMarkIcon } from './icons/Icons';
 import type { ArticleStatus } from '../types';
+import { postToWordPress } from '../services/wordpressService';
+import type { WordPressStatus, PostToWordPressParams } from '../services/wordpressService';
 
 interface PostToWordPressModalProps {
   isOpen: boolean;
   onClose: () => void;
   onPost: (status: ArticleStatus) => void;
   articleTitle: string;
+  articleHtml: string;
+  metaDescription: string;
+  wpParams: Pick<PostToWordPressParams, 'credentials'>;
 }
 
-const PostToWordPressModal: React.FC<PostToWordPressModalProps> = ({ isOpen, onClose, onPost, articleTitle }) => {
+const PostToWordPressModal: React.FC<PostToWordPressModalProps> = ({ isOpen, onClose, onPost, articleTitle, articleHtml, metaDescription, wpParams }) => {
   const [status, setStatus] = useState<ArticleStatus>('下書き');
   const [categories, setCategories] = useState('');
   const [tags, setTags] = useState('');
   const [isPosting, setIsPosting] = useState(false);
   const [postSuccess, setPostSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
-  const handlePost = () => {
+  const handlePost = async () => {
     setIsPosting(true);
-    // NOTE: This is a mock posting process. In a real application, this would
-    // make an API call to the WordPress site to create a new post with the
-    // article content, title, status, categories, and tags.
-    // This requires a backend proxy to avoid CORS issues and to secure credentials.
-    setTimeout(() => {
-        setIsPosting(false);
-        setPostSuccess(true);
-        setTimeout(() => {
-            onPost(status);
-        }, 1500); // Wait a bit before closing modal to show success message
-    }, 2000);
+    setError(null);
+    try {
+      const wpStatus: WordPressStatus = status === '投稿済み' ? 'publish' : 'draft';
+      await postToWordPress({
+        credentials: wpParams.credentials,
+        title: articleTitle,
+        contentHtml: articleHtml,
+        status: wpStatus,
+        excerpt: metaDescription,
+      });
+      setPostSuccess(true);
+      setTimeout(() => {
+        onPost(status);
+      }, 800);
+    } catch (err: any) {
+      setError(err?.message ?? 'WordPress投稿に失敗しました');
+    } finally {
+      setIsPosting(false);
+    }
   };
   
   return (
@@ -76,6 +90,12 @@ const PostToWordPressModal: React.FC<PostToWordPressModalProps> = ({ isOpen, onC
                     />
                 </div>
             </div>
+
+            {error && (
+              <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+                {error}
+              </div>
+            )}
 
             <div className="mt-8 flex justify-end">
               <button

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import type { WordPressCredentials } from '../types';
 import { XMarkIcon, CheckCircleIcon } from './icons/Icons';
+import { testWordPressConnection, isWpProxyConfigured } from '../services/wordpressService';
 
 interface WordPressSettingsModalProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ const WordPressSettingsModal: React.FC<WordPressSettingsModalProps> = ({ isOpen,
   const [localCreds, setLocalCreds] = useState<WordPressCredentials>(credentials);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
+  const [testMessage, setTestMessage] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalCreds(credentials);
@@ -32,21 +34,19 @@ const WordPressSettingsModal: React.FC<WordPressSettingsModalProps> = ({ isOpen,
     onClose();
   };
   
-  const handleTestConnection = () => {
+  const handleTestConnection = async () => {
       setIsTesting(true);
       setTestResult(null);
-      // NOTE: This is a mock test. In a real application, this would make an
-      // API call to the WordPress site's REST API to validate credentials.
-      // e.g., fetch(`${localCreds.url}/wp-json/wp/v2/users/me`)
-      // A direct browser call would be blocked by CORS, so a backend proxy is required.
-      setTimeout(() => {
-          if (localCreds.url && localCreds.username && localCreds.appPassword) {
-              setTestResult('success');
-          } else {
-              setTestResult('error');
-          }
-          setIsTesting(false);
-      }, 1500);
+      setTestMessage(null);
+      const result = await testWordPressConnection(localCreds);
+      setIsTesting(false);
+      if (result.ok) {
+        setTestResult('success');
+        setTestMessage(result.message ?? '接続に成功しました');
+      } else {
+        setTestResult('error');
+        setTestMessage(result.message ?? '接続に失敗しました');
+      }
   };
 
   return (
@@ -61,8 +61,22 @@ const WordPressSettingsModal: React.FC<WordPressSettingsModalProps> = ({ isOpen,
         <p className="text-sm text-slate-600 mb-6">
             記事を直接投稿するために、WordPressサイトの情報を入力してください。
             <a href="#" className="text-sky-600 hover:underline">アプリケーションパスワードの取得方法</a>
+            {isWpProxyConfigured() && (
+              <span className="block text-xs text-slate-500 mt-1">WPプロキシが有効です。CORS設定なしで接続テスト・投稿できます。</span>
+            )}
         </p>
         <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700">サイト名</label>
+            <input
+              type="text"
+              name="siteName"
+              value={localCreds.siteName || ''}
+              onChange={handleChange}
+              placeholder="例: 月刊副業"
+              className="mt-1 block w-full px-3 py-2 bg-white text-slate-900 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-sky-500 focus:border-sky-500"
+            />
+          </div>
           <div>
             <label className="block text-sm font-medium text-slate-700">WordPressサイトURL</label>
             <input
@@ -106,8 +120,8 @@ const WordPressSettingsModal: React.FC<WordPressSettingsModalProps> = ({ isOpen,
             >
                 {isTesting ? 'テスト中...' : '接続テスト'}
             </button>
-            {testResult === 'success' && <span className="text-sm text-green-600 flex items-center"><CheckCircleIcon className="w-5 h-5 mr-1" />接続に成功しました</span>}
-            {testResult === 'error' && <span className="text-sm text-red-600">接続に失敗しました</span>}
+            {testResult === 'success' && <span className="text-sm text-green-600 flex items-center"><CheckCircleIcon className="w-5 h-5 mr-1" />{testMessage ?? '接続に成功しました'}</span>}
+            {testResult === 'error' && <span className="text-sm text-red-600">{testMessage ?? '接続に失敗しました'}</span>}
         </div>
 
         <div className="mt-8 flex justify-end space-x-3">
