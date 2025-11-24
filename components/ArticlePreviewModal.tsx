@@ -48,6 +48,9 @@ const ArticlePreviewModal: React.FC<ArticlePreviewModalProps> = ({ article, onCl
     }
   };
 
+  const getSrc = (data: string, mime?: string) =>
+    data?.startsWith('data:') ? data : `data:${mime ?? 'image/jpeg'};base64,${data}`;
+
   return (
     <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-black/40 p-4 overflow-y-auto">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl border border-slate-200">
@@ -68,7 +71,7 @@ const ArticlePreviewModal: React.FC<ArticlePreviewModalProps> = ({ article, onCl
         <div className="max-h-[80vh] overflow-y-auto px-4 py-4 space-y-4">
           {article.eyecatchImage ? (
             <img
-              src={`data:image/jpeg;base64,${article.eyecatchImage}`}
+              src={getSrc(article.eyecatchImage)}
               alt="アイキャッチ"
               className="w-full rounded-lg object-cover aspect-video"
             />
@@ -95,10 +98,10 @@ const ArticlePreviewModal: React.FC<ArticlePreviewModalProps> = ({ article, onCl
             <div>
               <h4 className="text-sm font-semibold text-slate-700 mb-2">H2見出し画像</h4>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                {article.headingImages.map(({ heading, imageBase64 }) => (
+                {article.headingImages.map(({ heading, imageBase64, mimeType }) => (
                   <div key={heading}>
                     <img
-                      src={`data:image/jpeg;base64,${imageBase64}`}
+                      src={getSrc(imageBase64, mimeType)}
                       alt={heading}
                       className="w-full h-auto object-cover rounded-lg aspect-[16/9] border"
                     />

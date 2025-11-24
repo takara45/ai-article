@@ -23,6 +23,7 @@ export type Language = 'English' | 'Mandarin' | 'Cantonese' | 'Korean';
 export interface HeadingImage {
   heading: string;
   imageBase64: string;
+  mimeType?: string;
 }
 
 export interface Article {
@@ -34,17 +35,17 @@ export interface Article {
   status: ArticleStatus;
   plan: Plan;
   sources: GroundingSource[];
-  eyecatchImage?: string;
+  eyecatchImage?: string; // data URI または base64
   metaDescription: string;
   headingImages: HeadingImage[];
   userId?: string;
 }
 
 export interface WordPressCredentials {
+  siteName?: string;
   url: string;
   username: string;
   appPassword: string;
-  siteName?: string;
 }
 
 export interface GroundingSource {

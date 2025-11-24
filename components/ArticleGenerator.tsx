@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import type { Plan, Article, WordPressCredentials, GroundingSource, Tone, HeadingImage, Language } from '../types';
 import { PlanType } from '../types';
-import { generateTitles, generateArticle, generateImage, generateHeadingImages } from '../services/geminiService';
+import { generateTitles, generateArticle, generateImage, generateHeadingImages, isImageGenerationEnabled } from '../services/geminiService';
 import { ArrowLeftIcon, SparklesIcon, ChevronRightIcon, DocumentArrowUpIcon, PhotoIcon, CodeBracketIcon, EyeIcon, ArrowPathIcon } from './icons/Icons';
 import PostToWordPressModal from './PostToWordPressModal';
 import { marked } from 'marked';
@@ -60,6 +60,7 @@ const ArticleGenerator: React.FC<ArticleGeneratorProps> = ({ plan, onBack, onArt
 
   const [headingImages, setHeadingImages] = useState<HeadingImage[]>([]);
   const [isHeadingImagesLoading, setIsHeadingImagesLoading] = useState(false);
+  const imageEnabled = isImageGenerationEnabled();
   
   // Advanced settings
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -190,33 +191,35 @@ const ArticleGenerator: React.FC<ArticleGeneratorProps> = ({ plan, onBack, onArt
       setSources(fetchedSources);
       setStep('editor');
 
-      // アイキャッチ画像生成
-      setIsImageLoading(true);
-      setImageError(null);
-      generateImage(selectedTitle).then(imageData => {
-        setEyecatchImage(imageData);
-      }).catch(imgErr => {
-        setImageError((imgErr as Error).message || 'アイキャッチ画像の生成に失敗しました。');
-      }).finally(() => {
-        setIsImageLoading(false);
-      });
-      
-      // H2見出し画像生成
-      const h2Regex = /^## (.*$)/gm;
-      const extractedHeadings = [...articleText.matchAll(h2Regex)].map(match => match[1].trim());
+      if (imageEnabled) {
+        // アイキャッチ画像生成
+        setIsImageLoading(true);
+        setImageError(null);
+        generateImage(selectedTitle).then(imageData => {
+          setEyecatchImage(imageData);
+        }).catch(imgErr => {
+          setImageError((imgErr as Error).message || 'アイキャッチ画像の生成に失敗しました。');
+        }).finally(() => {
+          setIsImageLoading(false);
+        });
+        
+        // H2見出し画像生成（上限5件）
+        const h2Regex = /^## (.*$)/gm;
+        const extractedHeadings = [...articleText.matchAll(h2Regex)].map(match => match[1].trim()).slice(0, 5);
 
-      if (extractedHeadings.length > 0) {
-        setIsHeadingImagesLoading(true);
-        generateHeadingImages(extractedHeadings)
-          .then(images => {
-            setHeadingImages(images);
-          })
-          .catch(err => {
-            console.error("見出し画像の生成中にエラー:", err);
-          })
-          .finally(() => {
-            setIsHeadingImagesLoading(false);
-          });
+        if (extractedHeadings.length > 0) {
+          setIsHeadingImagesLoading(true);
+          generateHeadingImages(extractedHeadings)
+            .then(images => {
+              setHeadingImages(images);
+            })
+            .catch(err => {
+              console.error("見出し画像の生成中にエラー:", err);
+            })
+            .finally(() => {
+              setIsHeadingImagesLoading(false);
+            });
+        }
       }
 
     } catch (e) {
@@ -228,7 +231,7 @@ const ArticleGenerator: React.FC<ArticleGeneratorProps> = ({ plan, onBack, onArt
   }, [selectedTitle, keywords, targetAudience, plan.type, referenceUrls, referenceText, h2Count, h3Count, charsPerHeading, tone, customPrompt, language]);
 
   const handleRegenerateImage = useCallback(async () => {
-    if (!selectedTitle) return;
+    if (!selectedTitle || !imageEnabled) return;
     setIsImageLoading(true);
     setImageError(null);
     try {
@@ -253,17 +256,20 @@ const ArticleGenerator: React.FC<ArticleGeneratorProps> = ({ plan, onBack, onArt
     renderer.heading = (token: any) => {
       const originalHtml = originalHeading(token);
       if (token.depth === 2) {
-        const headingImage = headingImages.find(img => img.heading === token.text.trim());
-        if (headingImage) {
-          return `
-            ${originalHtml}
-            <img 
-              src="data:image/jpeg;base64,${headingImage.imageBase64}" 
-              alt="${token.text}" 
-              style="aspect-ratio: 16/9; object-fit: cover; width: 100%; border-radius: 8px; margin-top: 1em; margin-bottom: 1em;" 
-            />
-          `;
-        }
+      const headingImage = headingImages.find(img => img.heading === token.text.trim());
+      if (headingImage) {
+        const src = headingImage.imageBase64.startsWith('data:')
+          ? headingImage.imageBase64
+          : `data:${headingImage.mimeType ?? 'image/jpeg'};base64,${headingImage.imageBase64}`;
+        return `
+          ${originalHtml}
+          <img 
+            src="${src}" 
+            alt="${token.text}" 
+            style="aspect-ratio: 16/9; object-fit: cover; width: 100%; border-radius: 8px; margin-top: 1em; margin-bottom: 1em;" 
+          />
+        `;
+      }
       }
       return originalHtml;
     };
@@ -537,7 +543,7 @@ const ArticleGenerator: React.FC<ArticleGeneratorProps> = ({ plan, onBack, onArt
                   </div>
                 )}
                 {eyecatchImage && !isImageLoading && (
-                  <img src={`data:image/jpeg;base64,${eyecatchImage}`} alt="アイキャッチ画像" className="w-full h-full object-cover" />
+                  <img src={eyecatchImage.startsWith('data:') ? eyecatchImage : `data:image/jpeg;base64,${eyecatchImage}`} alt="アイキャッチ画像" className="w-full h-full object-cover" />
                 )}
                 {!eyecatchImage && !isImageLoading && (
                   <div className="w-full h-full flex flex-col items-center justify-center text-slate-500">
@@ -547,14 +553,16 @@ const ArticleGenerator: React.FC<ArticleGeneratorProps> = ({ plan, onBack, onArt
                 )}
               </div>
               <div className="text-right">
-                <button
-                  onClick={handleRegenerateImage}
-                  disabled={isImageLoading}
-                  className="inline-flex items-center px-3 py-1.5 border border-slate-300 text-xs font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <ArrowPathIcon className={`w-4 h-4 mr-2 ${isImageLoading ? 'animate-spin' : ''}`} />
-                  再生成
-                </button>
+                {imageEnabled && (
+                  <button
+                    onClick={handleRegenerateImage}
+                    disabled={isImageLoading}
+                    className="inline-flex items-center px-3 py-1.5 border border-slate-300 text-xs font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    <ArrowPathIcon className={`w-4 h-4 mr-2 ${isImageLoading ? 'animate-spin' : ''}`} />
+                    再生成
+                  </button>
+                )}
               </div>
             </div>
 
@@ -571,12 +579,17 @@ const ArticleGenerator: React.FC<ArticleGeneratorProps> = ({ plan, onBack, onArt
               )}
               {!isHeadingImagesLoading && headingImages.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-2">
-                  {headingImages.map(({ heading, imageBase64 }) => (
+                  {headingImages.map(({ heading, imageBase64, mimeType }) => {
+                    const src = imageBase64.startsWith('data:')
+                      ? imageBase64
+                      : `data:${mimeType ?? 'image/jpeg'};base64,${imageBase64}`;
+                    return (
                     <div key={heading}>
-                      <img src={`data:image/jpeg;base64,${imageBase64}`} alt={heading} className="w-full h-auto object-cover rounded-lg aspect-[16/9] border" />
+                      <img src={src} alt={heading} className="w-full h-auto object-cover rounded-lg aspect-[16/9] border" />
                       <p className="text-xs text-slate-600 mt-1">{heading}</p>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
                {!isHeadingImagesLoading && headingImages.length === 0 && <p className="text-sm text-slate-500 mt-2">見出し画像の生成に失敗したか、対象の見出しがありませんでした。</p>}

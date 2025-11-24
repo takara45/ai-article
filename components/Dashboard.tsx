@@ -26,14 +26,18 @@ const PlanCard: React.FC<{ plan: Plan; onSelect: () => void }> = ({ plan, onSele
   </div>
 );
 
-const ArticleHistoryItem: React.FC<{ article: Article; onClick: () => void }> = ({ article, onClick }) => (
+const ArticleHistoryItem: React.FC<{ article: Article; onClick: () => void }> = ({ article, onClick }) => {
+  const src = article.eyecatchImage
+    ? (article.eyecatchImage.startsWith('data:') ? article.eyecatchImage : `data:image/jpeg;base64,${article.eyecatchImage}`)
+    : null;
+  return (
     <li
       className="bg-white p-4 rounded-md shadow-sm border border-slate-200 flex items-center justify-between cursor-pointer hover:border-sky-400 transition"
       onClick={onClick}
     >
       <div className='flex items-center space-x-4'>
-          {article.eyecatchImage ? (
-              <img src={`data:image/jpeg;base64,${article.eyecatchImage}`} alt={article.title} className="w-16 h-10 rounded object-cover bg-slate-100" />
+          {src ? (
+              <img src={src} alt={article.title} className="w-16 h-10 rounded object-cover bg-slate-100" />
           ) : (
               <div className="w-16 h-10 flex items-center justify-center bg-slate-100 rounded">
                   <DocumentTextIcon className="w-6 h-6 text-slate-400" />
@@ -51,6 +55,7 @@ const ArticleHistoryItem: React.FC<{ article: Article; onClick: () => void }> = 
       }`}>{article.status}</span>
     </li>
   );
+};
 
 
 const Dashboard: React.FC<DashboardProps> = ({ onSelectPlan, articles, wpCredentials, onUpdateArticle, userId, isLoading }) => {

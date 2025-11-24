@@ -6,6 +6,10 @@ const getEnv = (name: string): string | undefined => {
   return (import.meta as any).env?.[name] ?? process.env?.[name];
 };
 
+const IMAGE_GEN_ENABLED = (getEnv('VITE_IMAGE_GEN_ENABLED') ?? 'true').toLowerCase() !== 'false';
+
+export const isImageGenerationEnabled = () => IMAGE_GEN_ENABLED;
+
 const API_KEY = getEnv('VITE_API_KEY') ?? getEnv('API_KEY');
 
 if (!API_KEY) {
@@ -381,25 +385,40 @@ export const generateArticle = async (
 };
 
 export const generateImage = async (title: string): Promise<string> => {
+  if (!IMAGE_GEN_ENABLED) {
+    throw new Error('画像生成は無効化されています（VITE_IMAGE_GEN_ENABLED=false）');
+  }
   try {
     const prompt = `A professional, high-quality, photorealistic image for a blog post titled "${title}". The image should be visually appealing, clean, and modern. Focus purely on the visual theme.`;
     
-    const response = await ai.models.generateImages({
-      model: 'imagen-4.0-generate-001',
-      prompt: prompt,
-      config: {
-        numberOfImages: 1,
-        aspectRatio: '16:9',
-        outputMimeType: 'image/jpeg',
-      },
-    });
+    const tryGenerate = async (mime: 'image/png' | 'image/jpeg') => {
+      return ai.models.generateImages({
+        model: 'imagen-4.0-generate-001',
+        prompt: prompt,
+        config: {
+          numberOfImages: 1,
+          aspectRatio: '16:9',
+          outputMimeType: mime,
+          outputImageSize: '1024x576', // 16:9の軽量サイズ（約HD）
+        },
+      });
+    };
 
-    if (response.generatedImages && response.generatedImages.length > 0 && response.generatedImages[0].image?.imageBytes) {
-      return response.generatedImages[0].image.imageBytes;
-    } else {
-       console.error("画像生成APIは成功しましたが、画像データが含まれていませんでした。", response);
-       throw new Error('画像が生成されませんでした。安全フィルターが作動した可能性があります。');
+    // まずjpegを試し、失敗したらpngにフォールバック（API対応mimeのみ）
+    let response = await tryGenerate('image/jpeg');
+    if (!response.generatedImages?.[0]?.image?.imageBytes) {
+      response = await tryGenerate('image/png');
     }
+
+    const img = response.generatedImages?.[0]?.image?.imageBytes;
+    const mimeType = response.generatedImages?.[0]?.mimeType ?? 'image/jpeg';
+
+    if (img) {
+      return `data:${mimeType};base64,${img}`;
+    }
+
+    console.error("画像生成APIは成功しましたが、画像データが含まれていませんでした。", response);
+    throw new Error('画像が生成されませんでした。安全フィルターが作動した可能性があります。');
   } catch (error) {
     console.error("アイキャッチ画像の生成に失敗しました:", error);
     throw new Error("アイキャッチ画像の生成中にAPIエラーが発生しました。時間をおいて再試行してください。");
@@ -407,8 +426,10 @@ export const generateImage = async (title: string): Promise<string> => {
 };
 
 export const generateHeadingImages = async (headings: string[]): Promise<{ heading: string; imageBase64: string; }[]> => {
+  if (!IMAGE_GEN_ENABLED) return [];
   try {
-    const imagePromises = headings.map(heading => {
+    const limitedHeadings = headings.slice(0, 5); // 上限5件
+    const imagePromises = limitedHeadings.map(heading => {
       const prompt = `A professional, high-quality, photorealistic image for a blog post heading titled "${heading}". The image should be visually appealing, clean, and modern. Crucially, the image must NOT contain any text, letters, characters, or symbols.`;
       return ai.models.generateImages({
         model: 'imagen-4.0-generate-001',
@@ -417,10 +438,13 @@ export const generateHeadingImages = async (headings: string[]): Promise<{ headi
           numberOfImages: 1,
           aspectRatio: '16:9', // アイキャッチと同じ比率に変更
           outputMimeType: 'image/jpeg',
+          outputImageSize: '1024x576',
         },
       }).then(response => {
-        if (response.generatedImages && response.generatedImages.length > 0 && response.generatedImages[0].image?.imageBytes) {
-          return { heading, imageBase64: response.generatedImages[0].image.imageBytes };
+        const img = response.generatedImages?.[0]?.image?.imageBytes ?? '';
+        const mimeType = response.generatedImages?.[0]?.mimeType ?? 'image/jpeg';
+        if (img) {
+          return { heading, imageBase64: `data:${mimeType};base64,${img}` };
         }
         return { heading, imageBase64: '' }; 
       });
